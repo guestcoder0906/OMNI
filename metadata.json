@@ -1,0 +1,5 @@
+{
+  "name": "Omniscript: World Engine",
+  "description": "A sophisticated text-based reality simulator powered by Gemini. It acts as an operating system for infinite worlds, managing physics, narrative, and state in real-time.",
+  "requestFramePermissions": []
+}
