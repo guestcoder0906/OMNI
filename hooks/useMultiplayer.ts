@@ -12,6 +12,7 @@ export const useMultiplayer = (
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [connectedPlayers, setConnectedPlayers] = useState<any[]>([]);
     const [pendingActions, setPendingActions] = useState<{ playerId: string, action: string }[]>([]);
+    const [isGameStarted, setIsGameStarted] = useState(false);
     const channelRef = useRef<any>(null);
 
     // Derived Host State
@@ -42,6 +43,7 @@ export const useMultiplayer = (
         setSessionId(null);
         setConnectedPlayers([]);
         setPendingActions([]);
+        setIsGameStarted(false);
     };
 
     const kickPlayer = async (targetUserId: string) => {
@@ -51,6 +53,16 @@ export const useMultiplayer = (
             event: 'kick',
             payload: { targetUserId }
         });
+    };
+
+    const skipTurn = async () => {
+        if (!isHost) return;
+        // Force process turn with current pending actions
+        // Only if there are any actions? Or just empty turn? 
+        // User says "auto skip a round even if player(s) hadnt submitted yet".
+        // This implies processing what we have.
+        processTurn(pendingActions);
+        setPendingActions([]);
     };
 
     const connectToSession = (id: string) => {
@@ -76,12 +88,13 @@ export const useMultiplayer = (
                 console.log("Received action", payload);
                 handleRemoteAction(payload);
             })
-            .on('broadcast', { event: 'gameState' }, ({ payload }: { payload: GameState }) => {
+            .on('broadcast', { event: 'gameState' }, ({ payload }: { payload: any }) => {
                 if (!isHost) {
                     setGameState(prev => ({
-                        ...payload,
+                        ...payload.state,
                         isLoading: false
                     }));
+                    if (payload.isGameStarted) setIsGameStarted(true);
                 }
             })
             .on('broadcast', { event: 'kick' }, async ({ payload }: { payload: { targetUserId: string } }) => {
@@ -93,12 +106,11 @@ export const useMultiplayer = (
             .subscribe(async (status) => {
                 if (status === 'SUBSCRIBED') {
                     const username = user?.user_metadata?.username || "Guest";
-                    // Note: We'll rely on App.tsx to ensure username is set correctly in user_metadata before join
                     await channel.track({
                         user_id: user?.id,
                         username: username,
                         online_at: new Date().toISOString(),
-                        is_dead: false // Track death status in presence
+                        is_dead: false
                     });
                 }
             });
@@ -117,9 +129,19 @@ export const useMultiplayer = (
     useEffect(() => {
         if (!sessionId || !isHost) return;
 
-        // Filter out dead players from "active" count if we track that
-        // For now, simple unique count
+        // If game not started, ONLY accept Host action
+        if (!isGameStarted) {
+            const hostAction = pendingActions.find(a => a.playerId === (user?.user_metadata?.username || user?.id));
+            if (hostAction) {
+                setIsGameStarted(true); // Host started it
+                processTurn([hostAction]);
+                setPendingActions([]);
+            }
+            return;
+        }
+
         const uniquePlayers = new Set(connectedPlayers.map((p: any) => p.username));
+        // Filter out dead players? logic handled elsewhere or engine ignores input.
         const activePlayerCount = uniquePlayers.size;
 
         if (activePlayerCount === 0) return;
@@ -131,11 +153,24 @@ export const useMultiplayer = (
             setPendingActions([]);
         }
 
-    }, [pendingActions, connectedPlayers, isHost, sessionId]);
+    }, [pendingActions, connectedPlayers, isHost, sessionId, isGameStarted]);
 
     const processTurn = async (actions: { playerId: string, action: string }[]) => {
-        const compositeInput = actions.map(a => `Player ${a.playerId} action: ${a.action}`).join('\n');
-        await handleInput(`[MULTIPLAYER TURN]\n${compositeInput}`);
+        // Prepare prompt with context about player files
+        let compositeInput = "";
+
+        if (!isGameStarted && actions.length === 1) {
+            // First turn - Host initializing
+            compositeInput = `[SYSTEM: HOST INITIALIZATION] ${actions[0].action}`;
+        } else {
+            compositeInput = `[MULTIPLAYER TURN]\n` + actions.map(a => {
+                // We can add a hint to the engine to generate char if missing
+                // validation happens in engine using files, but we can hint here.
+                return `Player ${a.playerId} (${a.playerId === (user?.user_metadata?.username || 'Guest') ? 'Host' : 'Player'}) action: ${a.action}`;
+            }).join('\n');
+        }
+
+        await handleInput(compositeInput);
     };
 
     // HOST syncs state to others
@@ -144,10 +179,13 @@ export const useMultiplayer = (
             channelRef.current.send({
                 type: 'broadcast',
                 event: 'gameState',
-                payload: gameState
+                payload: {
+                    state: gameState,
+                    isGameStarted
+                }
             });
         }
-    }, [gameState, isHost, sessionId]);
+    }, [gameState, isHost, sessionId, isGameStarted]);
 
     const broadcastAction = async (action: string) => {
         if (channelRef.current) {
@@ -178,6 +216,8 @@ export const useMultiplayer = (
         connectedPlayers,
         broadcastAction,
         isHost,
-        kickPlayer
+        kickPlayer,
+        skipTurn,
+        isGameStarted
     };
 };

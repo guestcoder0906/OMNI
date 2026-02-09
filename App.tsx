@@ -36,7 +36,9 @@ const App: React.FC = () => {
     connectedPlayers,
     broadcastAction,
     isHost,
-    kickPlayer // Added kickPlayer
+    kickPlayer, // Added kickPlayer
+    skipTurn,
+    isGameStarted
   } = useMultiplayer(user, gameState, setGameState, handleInput);
 
   /* UI State */
@@ -198,6 +200,17 @@ const App: React.FC = () => {
                 <div className="flex items-center space-x-2">
                   <span className="text-terminal-amber text-xs font-bold">SESSION: {sessionId}</span>
                   <span className="text-terminal-lightGray text-xs">({connectedPlayers.length} online)</span>
+
+                  {isHost && isGameStarted && (
+                    <button
+                      onClick={skipTurn}
+                      className="text-xs border border-terminal-amber text-terminal-amber px-2 py-0.5 rounded ml-2 hover:bg-terminal-amber/10"
+                      title="Force end turn"
+                    >
+                      SKIP
+                    </button>
+                  )}
+
                   <button
                     onClick={leaveSession}
                     className="text-xs text-red-500 hover:text-red-400 border border-red-900 rounded px-1 ml-2"
@@ -268,10 +281,11 @@ const App: React.FC = () => {
                 placeholder={
                   isPlayerDead ? "PLAYER IS DECEASED - ACCESS DENIED" :
                     !hasApiKey ? "Connect API Key to Start..." :
-                      (gameState.isInitialized ? "Enter command..." : "Initialize reality (e.g., 'A hard sci-fi space station running on low power')")
+                      (sessionId && !isHost && !isGameStarted) ? "Waiting for Host to Initialize World..." :
+                        (gameState.isInitialized ? "Enter command..." : "Initialize reality (e.g., 'A hard sci-fi space station running on low power')")
                 }
                 className="w-full bg-terminal-gray/10 border border-terminal-gray rounded p-3 pl-8 text-terminal-green focus:outline-none focus:border-terminal-green focus:ring-1 focus:ring-terminal-green placeholder-terminal-gray/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={gameState.isLoading || !hasApiKey || isPlayerDead}
+                disabled={gameState.isLoading || !hasApiKey || isPlayerDead || (!!sessionId && !isHost && !isGameStarted)}
                 autoComplete="off"
               />
             </form>
