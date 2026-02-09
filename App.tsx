@@ -7,6 +7,7 @@ import { LiveTicker } from './components/LiveTicker';
 import { AuthOverlay } from './components/AuthOverlay';
 import { UsernameSetup } from './components/UsernameSetup';
 import { PlayerList } from './components/PlayerList';
+import { supabase } from './lib/supabaseClient';
 
 const App: React.FC = () => {
   /* Auth State */
@@ -46,6 +47,14 @@ const App: React.FC = () => {
   const [showSidebar, setShowSidebar] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(true); // Assume true initially to avoid flicker, check on mount
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleLogout = async () => {
+    if (sessionId) await leaveSession();
+    await supabase.auth.signOut();
+    setUser(null);
+    setAuthChecked(false);
+  };
+
 
   // Check for API Key presence via AI Studio integration
   useEffect(() => {
@@ -156,8 +165,16 @@ const App: React.FC = () => {
           )}
 
           {user ? (
-            <div className="text-terminal-green text-xs border border-terminal-green/50 px-2 py-1 rounded bg-terminal-green/10">
-              ID: {currentUsername}
+            <div className="flex items-center space-x-2">
+              <div className="text-terminal-green text-xs border border-terminal-green/50 px-2 py-1 rounded bg-terminal-green/10">
+                ID: {currentUsername}
+              </div>
+              <button
+                onClick={handleLogout}
+                className="text-xs text-terminal-lightGray hover:text-white border border-terminal-gray px-2 py-1 rounded hover:bg-white/10"
+              >
+                LOGOUT
+              </button>
             </div>
           ) : (
             <div className="text-terminal-lightGray text-xs italic">Guest Mode</div>
@@ -222,15 +239,17 @@ const App: React.FC = () => {
             </div>
           )}
 
-          <div className="flex items-center space-x-2 border-l border-terminal-gray pl-4">
-            <span className="text-terminal-lightGray text-xs uppercase hidden md:inline">Debug</span>
-            <button
-              onClick={toggleDebug}
-              className={`w-8 h-4 rounded-full relative transition-colors duration-200 ease-in-out border ${gameState.debugMode ? 'bg-terminal-dimAmber border-terminal-amber' : 'bg-terminal-black border-terminal-gray'}`}
-            >
-              <div className={`absolute top-0.5 left-0.5 w-2.5 h-2.5 rounded-full bg-current transition-transform duration-200 ${gameState.debugMode ? 'translate-x-4 text-terminal-amber' : 'text-terminal-gray'}`}></div>
-            </button>
-          </div>
+          {(!sessionId || isHost) && (
+            <div className="flex items-center space-x-2 border-l border-terminal-gray pl-4">
+              <span className="text-terminal-lightGray text-xs uppercase hidden md:inline">Debug</span>
+              <button
+                onClick={toggleDebug}
+                className={`w-8 h-4 rounded-full relative transition-colors duration-200 ease-in-out border ${gameState.debugMode ? 'bg-terminal-dimAmber border-terminal-amber' : 'bg-terminal-black border-terminal-gray'}`}
+              >
+                <div className={`absolute top-0.5 left-0.5 w-2.5 h-2.5 rounded-full bg-current transition-transform duration-200 ${gameState.debugMode ? 'translate-x-4 text-terminal-amber' : 'text-terminal-gray'}`}></div>
+              </button>
+            </div>
+          )}
 
           {isSyncing && (
             <span className="text-terminal-green text-xs animate-pulse">SAVING...</span>
