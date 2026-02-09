@@ -11,6 +11,13 @@ export const CharacterSetupModal: React.FC<CharacterSetupModalProps> = ({ onComp
 
     const isLoading = externalLoading || isInternalLoading;
 
+    // Reset internal loading if external loading finishes (AI done thinking)
+    useEffect(() => {
+        if (!externalLoading && isInternalLoading) {
+            setIsInternalLoading(false);
+        }
+    }, [externalLoading, isInternalLoading]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (description.trim().length > 5) {

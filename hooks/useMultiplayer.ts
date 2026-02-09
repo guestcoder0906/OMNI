@@ -17,12 +17,13 @@ export const useMultiplayer = (
     const [hasCharacterFile, setHasCharacterFile] = useState(false);
     const channelRef = useRef<any>(null);
 
+    const currentUsername = user?.user_metadata?.username || user?.id || 'Guest';
+
     useEffect(() => {
-        const username = user?.user_metadata?.username || user?.id || 'Guest';
         // Check if file exists in gameState.files
-        const fileName = `Player_${username}.txt`;
+        const fileName = `Player_${currentUsername}.txt`;
         setHasCharacterFile(!!gameState.files[fileName]);
-    }, [gameState.files, user]);
+    }, [gameState.files, currentUsername]);
 
     // Derived Host State
     const hostPlayer = connectedPlayers.sort((a, b) => new Date(a.online_at).getTime() - new Date(b.online_at).getTime())[0];
@@ -140,7 +141,7 @@ export const useMultiplayer = (
 
         // If game not started, accept Host action OR New Player joins
         if (!isGameStarted) {
-            const hostAction = pendingActions.find(a => a.playerId === (user?.user_metadata?.username || user?.id));
+            const hostAction = pendingActions.find(a => a.playerId === currentUsername);
             const joiningActions = pendingActions.filter(a => a.action.startsWith('Describe your character') || a.action.length > 5); // Heuristic for now
 
             if (hostAction) {
@@ -155,27 +156,26 @@ export const useMultiplayer = (
             return;
         }
 
-        const uniquePlayers = new Set(connectedPlayers.map((p: any) => p.username));
-        // Filter out dead players? logic handled elsewhere or engine ignores input.
-        const activePlayerCount = uniquePlayers.size;
+        const uniquePresenceKeys = new Set(connectedPlayers.map((p: any) => p.user_id || p.presence_key));
+        const activePlayerCount = uniquePresenceKeys.size;
 
         if (activePlayerCount === 0) return;
 
         const receivedPlayerIds = new Set(pendingActions.map(a => a.playerId));
 
         if (receivedPlayerIds.size >= activePlayerCount && activePlayerCount > 0) {
-            processTurn(pendingActions);
+            processTurn(pendingActions, true);
             setPendingActions([]);
         }
 
     }, [pendingActions, connectedPlayers, isHost, sessionId, isGameStarted]);
 
-    const processTurn = async (actions: { playerId: string, action: string }[]) => {
-        if (!isGameStarted && actions.length === 1 && isHost) {
-            // First turn - Host initializing
-            const compositeInput = `[SYSTEM: HOST INITIALIZATION] ${actions[0].action}`;
-            await handleInput(compositeInput);
-            return;
+    const processTurn = async (actions: { playerId: string, action: string }[], forceStarted: boolean = false) => {
+        const gameActuallyStarted = isGameStarted || forceStarted;
+
+        if (!gameActuallyStarted && actions.length > 0 && isHost) {
+            // Heuristic: If we are here, at least one action must be the host's initialization
+            setIsGameStarted(true);
         }
 
         // Multiplayer Turn
@@ -183,14 +183,15 @@ export const useMultiplayer = (
             const playerFileName = `Player_${a.playerId}.txt`;
             const playerFileExists = !!gameState.files[playerFileName];
 
-            if (!playerFileExists && isGameStarted) {
+            if (!playerFileExists) {
                 // This player is joining and needs a character file
-                return `[SYSTEM: NEW PLAYER JOINING] Player Name: ${a.playerId}. Character Description: "${a.action}". ACTION: Generate 'Player_${a.playerId}.txt' based on this description and place them in the starting location. Ensure it follows World_Rules.txt.`;
+                return `[SYSTEM: NEW PLAYER JOINING] Player Name: ${a.playerId}. Character Description: "${a.action}". ACTION: YOU MUST GENERATE 'Player_${a.playerId}.txt' NOW based on this description. Describe their starting equipment, health (100), and location. Ensure it follows World_Rules.txt.`;
             }
             return `Player ${a.playerId}: ${a.action}`;
         });
 
-        const compositeInput = `[MULTIPLAYER TURN]\n${processedActions.join('\n')}`;
+        const turnTag = !gameActuallyStarted ? '[SYSTEM: HOST INITIALIZATION]' : '[MULTIPLAYER TURN]';
+        const compositeInput = `${turnTag}\n${processedActions.join('\n')}`;
         await handleInput(compositeInput);
     };
 
@@ -225,7 +226,7 @@ export const useMultiplayer = (
 
     const broadcastAction = async (action: string) => {
         if (channelRef.current) {
-            const playerId = user?.user_metadata?.username || user?.id || `Guest_${Math.floor(Math.random() * 1000)}`;
+            const playerId = currentUsername;
             await channelRef.current.send({
                 type: 'broadcast',
                 event: 'action',
