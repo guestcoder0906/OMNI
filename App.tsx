@@ -5,6 +5,8 @@ import { Terminal } from './components/Terminal';
 import { FileSystem } from './components/FileSystem';
 import { LiveTicker } from './components/LiveTicker';
 import { AuthOverlay } from './components/AuthOverlay';
+import { UsernameSetup } from './components/UsernameSetup';
+import { PlayerList } from './components/PlayerList';
 
 const App: React.FC = () => {
   /* Auth State */
@@ -30,9 +32,11 @@ const App: React.FC = () => {
     sessionId,
     createSession,
     joinSession,
+    leaveSession, // Added leaveSession
     connectedPlayers,
     broadcastAction,
-    isHost
+    isHost,
+    kickPlayer // Added kickPlayer
   } = useMultiplayer(user, gameState, setGameState, handleInput);
 
   /* UI State */
@@ -104,6 +108,9 @@ const App: React.FC = () => {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  // derived username for display
+  const currentUsername = user?.user_metadata?.username || user?.id || 'Guest';
+
   return (
     <div className="h-screen w-screen bg-terminal-black text-terminal-green font-mono flex flex-col overflow-hidden relative selection:bg-terminal-green selection:text-terminal-black">
 
@@ -116,6 +123,14 @@ const App: React.FC = () => {
           onGuest={() => {
             setAuthChecked(true);
           }}
+        />
+      )}
+
+      {/* Username Setup Modal - Only if logged in but no custom username set */}
+      {user && !user.user_metadata?.custom_username && (
+        <UsernameSetup
+          user={user}
+          onComplete={(updatedUser) => setUser(updatedUser)}
         />
       )}
 
@@ -138,7 +153,7 @@ const App: React.FC = () => {
 
           {user ? (
             <div className="text-terminal-green text-xs border border-terminal-green/50 px-2 py-1 rounded bg-terminal-green/10">
-              Logged in as: {user.user_metadata?.full_name || user.email}
+              ID: {currentUsername}
             </div>
           ) : (
             <div className="text-terminal-lightGray text-xs italic">Guest Mode</div>
@@ -181,6 +196,12 @@ const App: React.FC = () => {
                 <div className="flex items-center space-x-2">
                   <span className="text-terminal-amber text-xs font-bold">SESSION: {sessionId}</span>
                   <span className="text-terminal-lightGray text-xs">({connectedPlayers.length} online)</span>
+                  <button
+                    onClick={leaveSession}
+                    className="text-xs text-red-500 hover:text-red-400 border border-red-900 rounded px-1 ml-2"
+                  >
+                    LEAVE
+                  </button>
                 </div>
               )}
             </div>
@@ -220,8 +241,18 @@ const App: React.FC = () => {
             history={gameState.history}
             isLoading={gameState.isLoading}
             onReferenceClick={inspectItem}
-            userId={user?.user_metadata?.username || user?.user_metadata?.full_name || user?.email?.split('@')[0] || user?.id || 'guest'}
+            userId={currentUsername}
           />
+
+          {/* Player List (Multiplayer Only) */}
+          {sessionId && (
+            <PlayerList
+              players={connectedPlayers}
+              currentUserId={user?.id}
+              isHost={isHost}
+              onKick={kickPlayer}
+            />
+          )}
 
           {/* Input Area */}
           <div className="p-4 bg-terminal-black border-t border-terminal-gray shrink-0">

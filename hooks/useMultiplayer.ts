@@ -10,11 +10,13 @@ export const useMultiplayer = (
     handleInput: (input: string) => Promise<void>
 ) => {
     const [sessionId, setSessionId] = useState<string | null>(null);
-    const [isHost, setIsHost] = useState(false);
     const [connectedPlayers, setConnectedPlayers] = useState<any[]>([]);
     const [pendingActions, setPendingActions] = useState<{ playerId: string, action: string }[]>([]);
-    const [lastProcessedActionTime, setLastProcessedActionTime] = useState(0);
     const channelRef = useRef<any>(null);
+
+    // Derived Host State
+    const hostPlayer = connectedPlayers.sort((a, b) => new Date(a.online_at).getTime() - new Date(b.online_at).getTime())[0];
+    const isHost = hostPlayer?.user_id === user?.id;
 
     // Generate a random 6-character code
     const generateSessionId = () => {
@@ -24,15 +26,31 @@ export const useMultiplayer = (
     const createSession = async () => {
         const newSessionId = generateSessionId();
         setSessionId(newSessionId);
-        setIsHost(true);
-        // In a real app, we might check collision in DB, but for now random is fine
         connectToSession(newSessionId);
     };
 
     const joinSession = (id: string) => {
         setSessionId(id);
-        setIsHost(false);
         connectToSession(id);
+    };
+
+    const leaveSession = async () => {
+        if (channelRef.current) {
+            await supabase.removeChannel(channelRef.current);
+            channelRef.current = null;
+        }
+        setSessionId(null);
+        setConnectedPlayers([]);
+        setPendingActions([]);
+    };
+
+    const kickPlayer = async (targetUserId: string) => {
+        if (!isHost || !channelRef.current) return;
+        await channelRef.current.send({
+            type: 'broadcast',
+            event: 'kick',
+            payload: { targetUserId }
+        });
     };
 
     const connectToSession = (id: string) => {
@@ -43,7 +61,7 @@ export const useMultiplayer = (
         const channel = supabase.channel(`game_session_${id}`, {
             config: {
                 presence: {
-                    key: user?.user_metadata?.username || user?.user_metadata?.full_name || user?.email?.split('@')[0] || user?.id || `Guest_${Math.floor(Math.random() * 1000)}`,
+                    key: user?.id || `Guest_${Math.floor(Math.random() * 1000)}`,
                 },
             },
         });
@@ -60,21 +78,27 @@ export const useMultiplayer = (
             })
             .on('broadcast', { event: 'gameState' }, ({ payload }: { payload: GameState }) => {
                 if (!isHost) {
-                    console.log("Received game state sync", payload);
                     setGameState(prev => ({
                         ...payload,
-                        // Keep local UI state like loading/debug if needed, but mostly trust host
                         isLoading: false
                     }));
                 }
             })
+            .on('broadcast', { event: 'kick' }, async ({ payload }: { payload: { targetUserId: string } }) => {
+                if (payload.targetUserId === user?.id) {
+                    alert("You have been kicked from the session.");
+                    await leaveSession();
+                }
+            })
             .subscribe(async (status) => {
                 if (status === 'SUBSCRIBED') {
-                    const username = user?.user_metadata?.username || user?.id || "Guest";
+                    const username = user?.user_metadata?.username || "Guest";
+                    // Note: We'll rely on App.tsx to ensure username is set correctly in user_metadata before join
                     await channel.track({
                         user_id: user?.id,
                         username: username,
                         online_at: new Date().toISOString(),
+                        is_dead: false // Track death status in presence
                     });
                 }
             });
@@ -83,9 +107,7 @@ export const useMultiplayer = (
     };
 
     const handleRemoteAction = (payload: { playerId: string, action: string, timestamp: number }) => {
-        // Add to pending actions
         setPendingActions(prev => {
-            // Avoid duplicates
             if (prev.find(a => a.playerId === payload.playerId && a.action === payload.action)) return prev;
             return [...prev, payload];
         });
@@ -95,45 +117,25 @@ export const useMultiplayer = (
     useEffect(() => {
         if (!sessionId || !isHost) return;
 
-        // Check if we have actions from all players
-        // For simplicity in this text adventure, we might just process actions as they come 
-        // OR wait for everyone. User asked: "waits for all players to submit"
-
+        // Filter out dead players from "active" count if we track that
+        // For now, simple unique count
         const uniquePlayers = new Set(connectedPlayers.map((p: any) => p.username));
         const activePlayerCount = uniquePlayers.size;
 
         if (activePlayerCount === 0) return;
 
-        // Group actions by unique player
         const receivedPlayerIds = new Set(pendingActions.map(a => a.playerId));
 
         if (receivedPlayerIds.size >= activePlayerCount && activePlayerCount > 0) {
-            // Execute all actions!
-            // We order them by timestamp to be fair, or random, or just sequence.
-            // Since we need to update state sequentially, we'll chain them.
-
             processTurn(pendingActions);
-            setPendingActions([]); // Clear after processing
+            setPendingActions([]);
         }
 
     }, [pendingActions, connectedPlayers, isHost, sessionId]);
 
     const processTurn = async (actions: { playerId: string, action: string }[]) => {
-        // 1. Combine actions into a narrative input or process sequentially?
-        // User said "text can be set like local(player1)[blah]".
-        // We might want to send a combined prompt to Gemini:
-        // "Player1 says: 'attack'. Player2 says: 'run'."
-
         const compositeInput = actions.map(a => `Player ${a.playerId} action: ${a.action}`).join('\n');
-
-        // We send this special composite input to the engine
-        // But wait, our handleInput takes a string.
-        // We should probably modify handleInput or just send this composite string.
-
         await handleInput(`[MULTIPLAYER TURN]\n${compositeInput}`);
-
-        // After processing, if we are host, we broadcast the new state
-        // This happens in the next effect since gameState updates
     };
 
     // HOST syncs state to others
@@ -149,7 +151,7 @@ export const useMultiplayer = (
 
     const broadcastAction = async (action: string) => {
         if (channelRef.current) {
-            const playerId = user?.user_metadata?.username || user?.user_metadata?.full_name || user?.email?.split('@')[0] || user?.id || 'Guest';
+            const playerId = user?.user_metadata?.username || 'Guest';
             await channelRef.current.send({
                 type: 'broadcast',
                 event: 'action',
@@ -159,11 +161,6 @@ export const useMultiplayer = (
                     timestamp: Date.now()
                 }
             });
-
-            // If I am not host, I just wait.
-            // If I am host, I also add my own action to pending locally via the broadcast listener? 
-            // Actually broadcast sends to everyone including self? No usually not self.
-            // So we manually add to self.
 
             handleRemoteAction({
                 playerId: playerId,
@@ -177,8 +174,10 @@ export const useMultiplayer = (
         sessionId,
         createSession,
         joinSession,
+        leaveSession,
         connectedPlayers,
         broadcastAction,
-        isHost
+        isHost,
+        kickPlayer
     };
 };

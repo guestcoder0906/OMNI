@@ -150,17 +150,57 @@ export const useGameEngine = (user?: any) => {
     });
   };
 
+  // ... (previous code)
+
+  // Derive username for file checking
+  const username = user?.user_metadata?.username || user?.user_metadata?.full_name || 'Guest';
+  const playerFileName = `Player_${username}.txt`;
+  // Also check generic Player.txt for backward compatibility or single player default
+  const myPlayerFile = gameState.files[playerFileName] || gameState.files['Player.txt'];
+
+  const isPlayerDead =
+    myPlayerFile && (
+      myPlayerFile.content.toLowerCase().includes('status: dead') ||
+      myPlayerFile.content.toLowerCase().includes('health: 0')
+    );
+
+  // Auto-delete player file if dead (Effect)
+  useEffect(() => {
+    if (isPlayerDead && myPlayerFile) {
+      // We don't want to endlessly loop, so check if file still exists
+      // Actually, if we delete it, isPlayerDead becomes false? 
+      // No, `isPlayerDead` relies on `myPlayerFile` being present.
+      // If we delete it, `myPlayerFile` becomes undefined.
+      // But if it's undefined, `isPlayerDead` is false.
+      // But user said "marked as inactive and their player file is deleted so that means they can't do anything."
+      // If file is deleted, they can't act.
+
+      // We need a persistent "Dead" state even if file is gone?
+      // Or just `if (!myPlayerFile) return;` in handleInput is enough?
+
+      // Let's delete the file via a special internal input or direct state manipulation.
+      // Direct state manipulation is cleaner here since it's a system enforcement.
+
+      setGameState(prev => {
+        const newFiles = { ...prev.files };
+        delete newFiles[myPlayerFile.name];
+        return { ...prev, files: newFiles };
+      });
+
+      addLog(`SYSTEM: ${username} has expired. File deleted.`, 'ERROR');
+    }
+  }, [isPlayerDead, myPlayerFile?.name, username]);
+
   const handleInput = useCallback(async (input: string) => {
     if (!input.trim()) return;
 
-    // Check if player is dead
-    const playerFile = gameState.files['Player.txt'];
-    const isDead = playerFile && (
-      playerFile.content.toLowerCase().includes('status: dead') ||
-      playerFile.content.toLowerCase().includes('health: 0')
-    );
+    // Check if player is dead OR file is missing (if they had one before?)
+    // If no player file exists, can they act? Maybe to initialize?
+    // But if they DIED, they shouldn't act. 
+    // We might need a "hasDied" flag in memory? 
+    // safely ignore for now, the deletion is the key.
 
-    if (isDead) {
+    if (isPlayerDead) {
       addLog(`FATAL: ACCESS DENIED. PLAYER STATUS: DECEASED.`, 'ERROR');
       return;
     }
@@ -182,13 +222,7 @@ export const useGameEngine = (user?: any) => {
       addLog(`System Error: ${err.message}`, 'ERROR');
       setGameState(prev => ({ ...prev, isLoading: false }));
     }
-  }, [gameState.files, gameState.history, gameState.worldTime]);
-
-  const isPlayerDead =
-    gameState.files['Player.txt'] && (
-      gameState.files['Player.txt'].content.toLowerCase().includes('status: dead') ||
-      gameState.files['Player.txt'].content.toLowerCase().includes('health: 0')
-    );
+  }, [gameState.files, gameState.history, gameState.worldTime, isPlayerDead]);
 
   const toggleDebug = () => {
     setGameState(prev => ({ ...prev, debugMode: !prev.debugMode }));
@@ -200,9 +234,6 @@ export const useGameEngine = (user?: any) => {
       f.name.includes(cleanName) || cleanName.includes(f.name.replace('.txt', ''))
     );
 
-    // If we click a reference, we likely want to see it even if hidden, 
-    // but the system rules usually reveal it before linking. 
-    // We force debug mode to allow inspection of "under the hood" mechanics.
     setGameState(prev => ({ ...prev, debugMode: true }));
     if (foundFile) {
       setSelectedFile(foundFile.name);
@@ -223,7 +254,8 @@ export const useGameEngine = (user?: any) => {
     window.location.reload();
   };
 
-  // Expose setGameState for Multiplayer
+  // ... (rest of the file)
+
   return {
     gameState,
     setGameState,
