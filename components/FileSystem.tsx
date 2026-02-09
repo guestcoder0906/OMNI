@@ -18,14 +18,32 @@ export const FileSystem: React.FC<FileSystemProps> = ({ files, externalSelectedF
     }
   }, [externalSelectedFile]);
 
-  // Filter: Show file IF (Debug Mode is ON) OR (File is NOT hidden)
+  // Filter: Show file IF (Debug Mode is ON) OR (File is NOT hidden AND matches target if specified)
   const visibleFiles = (Object.values(files) as FileObject[])
-    .filter(f => debugMode || !f.isHidden);
+    .filter(f => {
+      if (debugMode) return true;
+      if (f.isHidden) return false;
+
+      // Syntax: target(user1, user2)[filename.txt]
+      const targetMatch = f.name.match(/^target\(([^)]+)\)\[(.*?)\]$/);
+      if (targetMatch) {
+        const allowedUsers = targetMatch[1].split(',').map(u => u.trim());
+        return allowedUsers.includes(currentUserId || 'Guest');
+      }
+      return true;
+    });
+
+  // Helper to get display name (strips target wrapper)
+  const getDisplayName = (name: string) => {
+    const targetMatch = name.match(/^target\(([^)]+)\)\[(.*?)\]$/);
+    return targetMatch ? targetMatch[2] : name;
+  };
 
   const fileList = visibleFiles.sort((a, b) => {
     const getPriority = (type: string, name: string) => {
-      if (name === 'Guide.txt') return 0;
-      if (name.includes('Rules')) return 1;
+      const displayName = getDisplayName(name);
+      if (displayName === 'Guide.txt') return 0;
+      if (displayName.includes('Rules')) return 1;
       if (type === 'PLAYER') return 2;
       if (type === 'LOCATION') return 3;
       return 4;
@@ -61,7 +79,7 @@ export const FileSystem: React.FC<FileSystemProps> = ({ files, externalSelectedF
                 {file.isHidden && debugMode && (
                   <span className="text-[8px] px-1 border border-terminal-gray text-terminal-gray rounded">HIDDEN</span>
                 )}
-                <span className="truncate max-w-[120px]">{file.name}</span>
+                <span className="truncate max-w-[120px]">{getDisplayName(file.name)}</span>
               </div>
               <span className="text-[10px] opacity-50 ml-2 shrink-0">{file.type.substring(0, 3)}</span>
             </button>
