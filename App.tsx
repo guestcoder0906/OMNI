@@ -246,9 +246,6 @@ const App: React.FC = () => {
       </header>
 
       {/* Main Layout */}
-  // ... (inside return)
-
-      {/* Main Layout */}
       <div className="flex-1 flex overflow-hidden relative">
 
         {/* Main Terminal Area */}
