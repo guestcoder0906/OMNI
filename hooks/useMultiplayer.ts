@@ -43,7 +43,7 @@ export const useMultiplayer = (
         const channel = supabase.channel(`game_session_${id}`, {
             config: {
                 presence: {
-                    key: user?.user_metadata?.username || user?.id || `Guest_${Math.floor(Math.random() * 1000)}`,
+                    key: user?.user_metadata?.username || user?.user_metadata?.full_name || user?.email?.split('@')[0] || user?.id || `Guest_${Math.floor(Math.random() * 1000)}`,
                 },
             },
         });
@@ -149,7 +149,7 @@ export const useMultiplayer = (
 
     const broadcastAction = async (action: string) => {
         if (channelRef.current) {
-            const playerId = user?.user_metadata?.username || user?.id || 'Guest';
+            const playerId = user?.user_metadata?.username || user?.user_metadata?.full_name || user?.email?.split('@')[0] || user?.id || 'Guest';
             await channelRef.current.send({
                 type: 'broadcast',
                 event: 'action',

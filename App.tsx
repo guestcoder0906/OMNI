@@ -122,7 +122,7 @@ const App: React.FC = () => {
       {/* Header / Status Bar */}
       <header className="h-12 border-b border-terminal-gray bg-terminal-black flex items-center justify-between px-4 z-20 shadow-md shrink-0">
         <div className="flex items-center space-x-4">
-          <div className="text-terminal-amber font-bold tracking-widest">OMNISCRIPT</div>
+          <div className="text-terminal-amber font-bold tracking-widest">AI-MUD</div>
           <div className="hidden md:block text-xs text-terminal-lightGray opacity-50">v3.1.0-ENGINE</div>
         </div>
 
@@ -138,7 +138,7 @@ const App: React.FC = () => {
 
           {user ? (
             <div className="text-terminal-green text-xs border border-terminal-green/50 px-2 py-1 rounded bg-terminal-green/10">
-              Logged in as: {user.user_metadata?.username || user.email}
+              Logged in as: {user.user_metadata?.full_name || user.email}
             </div>
           ) : (
             <div className="text-terminal-lightGray text-xs italic">Guest Mode</div>
@@ -220,7 +220,7 @@ const App: React.FC = () => {
             history={gameState.history}
             isLoading={gameState.isLoading}
             onReferenceClick={inspectItem}
-            userId={user?.user_metadata?.username || user?.id || 'guest'}
+            userId={user?.user_metadata?.username || user?.user_metadata?.full_name || user?.email?.split('@')[0] || user?.id || 'guest'}
           />
 
           {/* Input Area */}
