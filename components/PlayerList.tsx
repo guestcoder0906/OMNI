@@ -5,9 +5,10 @@ interface PlayerListProps {
     currentUserId: string;
     isHost: boolean;
     onKick: (userId: string) => void;
+    embedded?: boolean;
 }
 
-export const PlayerList: React.FC<PlayerListProps> = ({ players, currentUserId, isHost, onKick }) => {
+export const PlayerList: React.FC<PlayerListProps> = ({ players, currentUserId, isHost, onKick, embedded }) => {
     if (players.length === 0) return null;
 
     // Find host based on oldest online_at (same logic as useMultiplayer)
@@ -15,11 +16,13 @@ export const PlayerList: React.FC<PlayerListProps> = ({ players, currentUserId, 
     const hostId = sortedPlayers[0]?.user_id;
 
     return (
-        <div className="absolute bottom-4 right-4 z-40 bg-terminal-black/90 border border-terminal-gray rounded p-3 min-w-[200px] animate-fade-in shadow-lg">
-            <h3 className="text-terminal-gray text-xs uppercase mb-2 border-b border-terminal-gray pb-1 flex justify-between">
-                <span>Players</span>
-                <span>{players.length}</span>
-            </h3>
+        <div className={`${embedded ? 'w-full' : 'absolute bottom-4 right-4 z-40 bg-terminal-black/90 border border-terminal-gray rounded shadow-lg min-w-[200px]'} p-3 animate-fade-in`}>
+            {!embedded && (
+                <h3 className="text-terminal-gray text-xs uppercase mb-2 border-b border-terminal-gray pb-1 flex justify-between">
+                    <span>Players</span>
+                    <span>{players.length}</span>
+                </h3>
+            )}
             <ul className="space-y-1 text-xs">
                 {sortedPlayers.map((player) => {
                     const isMe = player.user_id === currentUserId;

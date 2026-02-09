@@ -259,15 +259,7 @@ const App: React.FC = () => {
             userId={currentUsername}
           />
 
-          {/* Player List (Multiplayer Only) */}
-          {sessionId && (
-            <PlayerList
-              players={connectedPlayers}
-              currentUserId={user?.id}
-              isHost={isHost}
-              onKick={kickPlayer}
-            />
-          )}
+
 
           {/* Input Area */}
           <div className="p-4 bg-terminal-black border-t border-terminal-gray shrink-0">
@@ -307,6 +299,10 @@ const App: React.FC = () => {
                 externalSelectedFile={selectedFile}
                 onSelect={setSelectedFile}
                 debugMode={gameState.debugMode}
+                userId={user?.id}
+                players={sessionId ? connectedPlayers : undefined}
+                isHost={isHost}
+                onKick={kickPlayer}
               />
             </div>
           </aside>

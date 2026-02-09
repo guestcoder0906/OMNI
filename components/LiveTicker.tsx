@@ -7,16 +7,16 @@ interface LiveTickerProps {
 
 export const LiveTicker: React.FC<LiveTickerProps> = ({ updates }) => {
   return (
-    <div className="absolute top-4 right-4 md:right-8 w-64 pointer-events-none z-10 flex flex-col items-end space-y-1">
+    <div className="absolute bottom-[90px] right-4 md:right-8 w-64 pointer-events-none z-10 flex flex-col items-end space-y-1">
       {updates.slice(0, 6).map((update, idx) => ( // Only show most recent 6 for visual clarity
         <div
           key={update.id}
           className={`
             text-xs font-mono px-3 py-1 rounded bg-black/80 border backdrop-blur-sm shadow-lg
             transform transition-all duration-500 ease-out animate-slide-in-right
-            ${update.type === 'POSITIVE' ? 'border-terminal-green text-terminal-green' : 
-              update.type === 'NEGATIVE' ? 'border-red-800 text-red-400' : 
-              'border-terminal-gray text-terminal-lightGray'}
+            ${update.type === 'POSITIVE' ? 'border-terminal-green text-terminal-green' :
+              update.type === 'NEGATIVE' ? 'border-red-800 text-red-400' :
+                'border-terminal-gray text-terminal-lightGray'}
           `}
           style={{ opacity: 1 - (idx * 0.15) }}
         >
